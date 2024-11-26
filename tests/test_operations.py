@@ -16,6 +16,7 @@ from myskoda.models.air_conditioning import (
 )
 from myskoda.models.auxiliary_heating import AuxiliaryConfig, AuxiliaryStartMode
 from myskoda.models.charging import ChargeMode
+from myskoda.models.departure import DepartureTimer
 from myskoda.myskoda import MySkoda
 from tests.conftest import FIXTURES_DIR, create_completed_json
 
@@ -621,4 +622,28 @@ async def test_set_seats_heating(
         method="POST",
         headers={"authorization": f"Bearer {ACCESS_TOKEN}"},
         json=json_data,
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("number", "enabled"), [(1, True), (2, False)])
+async def test_set_departure_timer(
+    responses: aioresponses, mqtt_client: MQTTClient, myskoda: MySkoda, number: int, enabled: bool
+) -> None:
+    url = f"{BASE_URL_SKODA}/api/v1/vehicle-automatization/{VIN}/departure/timers"
+    responses.post(url=url)
+
+    departure_timer = DepartureTimer(id=number, enabled=enabled)
+    future = myskoda.set_departure_timer(VIN, departure_timer)
+
+    topic = f"{USER_ID}/{VIN}/operation-request/departure/update-departure-timers"
+    await mqtt_client.publish(topic, create_completed_json("update-departure-timers"), QOS_2)
+
+    json_data = {"timers": [{"id": departure_timer.id, "enabled": departure_timer.enabled}]}
+    await future
+    responses.assert_called_with(
+        url=url,
+        method="POST",
+        headers={"authorization": f"Bearer {ACCESS_TOKEN}"},
+        json="",
     )

@@ -5,6 +5,8 @@ import json
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from aiohttp import ClientResponseError, ClientSession
 
@@ -12,6 +14,7 @@ from myskoda.anonymize import (
     anonymize_air_conditioning,
     anonymize_auxiliary_heating,
     anonymize_charging,
+    anonymize_departure_timers,
     anonymize_driving_range,
     anonymize_garage,
     anonymize_health,
@@ -38,6 +41,7 @@ from .models.air_conditioning import (
 )
 from .models.auxiliary_heating import AuxiliaryConfig, AuxiliaryHeating
 from .models.charging import Charging
+from .models.departure import DepartureInfo, DepartureTimer
 from .models.driving_range import DrivingRange
 from .models.health import Health
 from .models.info import Info
@@ -276,6 +280,19 @@ class RestApi:
         result = self._deserialize(raw, Garage.from_json)
         return GetEndpointResult(url=url, raw=raw, result=result)
 
+    async def get_departure_timers(
+        self, vin: str, anonymize: bool = False
+    ) -> GetEndpointResult[DepartureInfo]:
+        """Retrieve departure timers for the vehicle."""
+        url = f"/v1/vehicle-automatization/{vin}/departure/timers"
+        raw = self.process_json(
+            data=await self._make_get_request(url),
+            anonymize=anonymize,
+            anonymization_fn=anonymize_departure_timers,
+        )
+        result = self._deserialize(raw, DepartureInfo.from_json)
+        return GetEndpointResult(url=url, raw=raw, result=result)
+
     async def _headers(self) -> dict[str, str]:
         return {"authorization": f"Bearer {await self.authorization.get_access_token()}"}
 
@@ -512,6 +529,25 @@ class RestApi:
         }
         await self._make_post_request(
             url=f"/v1/vehicle-access/{vin}/honk-and-flash", json=json_data
+        )
+
+    async def set_departure_timer(self, vin: str, timer: DepartureTimer) -> None:
+        """Enable or disable departure timer."""
+        _LOGGER.debug(
+            "Setting departure timer nr. %i for vehicle %s to %r", timer.id, vin, timer.enabled
+        )
+        # Define the timezone
+        tz = ZoneInfo("Europe/Paris")  # Adjust the timezone as needed
+        # Get the current datetime with timezone
+        now = datetime.now(tz)
+        # Format the datetime string
+        datetime_str = now.isoformat()
+
+        json_data = {"deviceDateTime": datetime_str, "timers": [{"id": timer.id, "enabled": timer.enabled}]}
+        print(json_data)
+        await self._make_post_request(
+            url=f"/v1/vehicle-automatization/{vin}/departure/timers",
+            json=json_data,
         )
 
     def _deserialize[T](self, text: str, deserialize: Callable[[str], T]) -> T:

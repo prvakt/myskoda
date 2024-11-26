@@ -36,6 +36,7 @@ from .models.air_conditioning import (
 )
 from .models.auxiliary_heating import AuxiliaryConfig, AuxiliaryHeating
 from .models.charging import ChargeMode, Charging
+from .models.departure import DepartureInfo, DepartureTimer
 from .models.driving_range import DrivingRange
 from .models.health import Health
 from .models.info import CapabilityId, Info
@@ -280,6 +281,16 @@ class MySkoda:
         future = self._wait_for_operation(OperationName.UNLOCK)
         await self.rest_api.unlock(vin, spin)
         await future
+
+    async def set_departure_timer(self, vin: str, timer: DepartureTimer) -> None:
+        """Enable or disable departure timer."""
+        future = self._wait_for_operation(OperationName.UPDATE_DEPARTURE_TIMERS)
+        await self.rest_api.set_departure_timer(vin, timer)
+        await future
+
+    async def get_departure_timers(self, vin: str, anonymize: bool = False) -> DepartureInfo:
+        """Retrieve the basic vehicle information for the specified vehicle."""
+        return (await self.rest_api.get_departure_timers(vin, anonymize=anonymize)).result
 
     async def get_auth_token(self) -> str:
         """Retrieve the main access token for the IDK session."""
