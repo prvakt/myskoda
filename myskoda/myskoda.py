@@ -7,6 +7,7 @@ import logging
 from asyncio import gather
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
+from importlib.metadata import version
 from ssl import SSLContext
 from traceback import format_exc
 from types import SimpleNamespace
@@ -26,7 +27,13 @@ from myskoda.models.fixtures import (
 
 from .auth.authorization import Authorization
 from .event import Event
-from .models.air_conditioning import AirConditioning
+from .models.air_conditioning import (
+    AirConditioning,
+    AirConditioningAtUnlock,
+    AirConditioningWithoutExternalPower,
+    SeatHeating,
+    WindowHeating,
+)
 from .models.auxiliary_heating import AuxiliaryConfig, AuxiliaryHeating
 from .models.charging import ChargeMode, Charging
 from .models.driving_range import DrivingRange
@@ -204,10 +211,30 @@ class MySkoda:
         await self.rest_api.start_window_heating(vin)
         await future
 
-    async def set_ac_without_external_power(self, vin: str, enabled: bool) -> None:
+    async def set_ac_without_external_power(
+        self, vin: str, settings: AirConditioningWithoutExternalPower
+    ) -> None:
         """Enable or disable AC without external power."""
         future = self._wait_for_operation(OperationName.SET_AIR_CONDITIONING_WITHOUT_EXTERNAL_POWER)
-        await self.rest_api.set_ac_without_external_power(vin, enabled)
+        await self.rest_api.set_ac_without_external_power(vin, settings)
+        await future
+
+    async def set_ac_at_unlock(self, vin: str, settings: AirConditioningAtUnlock) -> None:
+        """Enable or disable AC at unlock."""
+        future = self._wait_for_operation(OperationName.SET_AIR_CONDITIONING_AT_UNLOCK)
+        await self.rest_api.set_ac_at_unlock(vin, settings)
+        await future
+
+    async def set_windows_heating(self, vin: str, settings: WindowHeating) -> None:
+        """Enable or disable windows heating with AC."""
+        future = self._wait_for_operation(OperationName.WINDOWS_HEATING)
+        await self.rest_api.set_windows_heating(vin, settings)
+        await future
+
+    async def set_seats_heating(self, vin: str, settings: SeatHeating) -> None:
+        """Enable or disable seats heating with AC."""
+        future = self._wait_for_operation(OperationName.SET_AIR_CONDITIONING_SEATS_HEATING)
+        await self.rest_api.set_seats_heating(vin, settings)
         await future
 
     async def set_target_temperature(self, vin: str, temperature: float) -> None:
@@ -371,34 +398,34 @@ class MySkoda:
                 result=result.result.to_dict(),
             )
 
+
     async def get_endpoint(
         self, vin: str, endpoint: Endpoint, anonymize: bool = False
     ) -> GetEndpointResult[Any]:
         """Invoke a get endpoint by endpoint enum."""
-        result = GetEndpointResult(url="", result=None, raw="")
+        # Mapping of endpoints to corresponding methods
+        endpoint_method_map = {
+            Endpoint.INFO: self.rest_api.get_info,
+            Endpoint.STATUS: self.rest_api.get_status,
+            Endpoint.AIR_CONDITIONING: self.rest_api.get_air_conditioning,
+            Endpoint.AUXILIARY_HEATING: self.rest_api.get_auxiliary_heating,
+            Endpoint.POSITIONS: self.rest_api.get_positions,
+            Endpoint.HEALTH: self.rest_api.get_health,
+            Endpoint.CHARGING: self.rest_api.get_charging,
+            Endpoint.MAINTENANCE: self.rest_api.get_maintenance,
+            Endpoint.DRIVING_RANGE: self.rest_api.get_driving_range,
+            Endpoint.TRIP_STATISTICS: self.rest_api.get_trip_statistics,
+        }
 
-        if endpoint == Endpoint.INFO:
-            result = await self.rest_api.get_info(vin, anonymize=anonymize)
-        elif endpoint == Endpoint.STATUS:
-            result = await self.rest_api.get_status(vin, anonymize=anonymize)
-        elif endpoint == Endpoint.AIR_CONDITIONING:
-            result = await self.rest_api.get_air_conditioning(vin, anonymize=anonymize)
-        elif endpoint == Endpoint.POSITIONS:
-            result = await self.rest_api.get_positions(vin, anonymize=anonymize)
-        elif endpoint == Endpoint.HEALTH:
-            result = await self.rest_api.get_health(vin, anonymize=anonymize)
-        elif endpoint == Endpoint.CHARGING:
-            result = await self.rest_api.get_charging(vin, anonymize=anonymize)
-        elif endpoint == Endpoint.MAINTENANCE:
-            result = await self.rest_api.get_maintenance(vin, anonymize=anonymize)
-        elif endpoint == Endpoint.DRIVING_RANGE:
-            result = await self.rest_api.get_driving_range(vin, anonymize=anonymize)
-        elif endpoint == Endpoint.TRIP_STATISTICS:
-            result = await self.rest_api.get_trip_statistics(vin, anonymize=anonymize)
-        else:
-            raise UnsupportedEndpointError
+        # Look up the method, or raise an error if unsupported
+        method = endpoint_method_map.get(endpoint)
+        if not method:
+            error_message = f"Unsupported endpoint: {endpoint}"
+            raise UnsupportedEndpointError(error_message)
 
-        return result
+        # Call the method and return the result
+        return await method(vin, anonymize=anonymize)
+
 
     async def generate_get_fixture(
         self, name: str, description: str, vins: list[str], endpoint: Endpoint
@@ -426,6 +453,7 @@ class MySkoda:
             generation_time=datetime.now(tz=UTC),
             vehicles=[vehicle for (_, vehicle) in vehicles],
             reports=reports,
+            library_version=version("MySkoda"),
         )
 
 
