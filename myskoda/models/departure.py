@@ -3,8 +3,10 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from datetime import time as datetime_time
+from typing import Any
 
 from mashumaro import field_options
+from mashumaro.config import BaseConfig
 from mashumaro.mixins.orjson import DataClassORJSONMixin
 
 from .air_conditioning import TemperatureUnit, TimerMode
@@ -26,10 +28,21 @@ class ChargingTime(DataClassORJSONMixin):
 
     id: int
     enabled: bool
-    start_time: datetime_time | None = field(
-        default=None, metadata=field_options(alias="startTime")
-    )
-    end_time: datetime_time | None = field(default=None, metadata=field_options(alias="endTime"))
+    start_time: datetime_time = field(metadata=field_options(alias="startTime"))
+    end_time: datetime_time = field(metadata=field_options(alias="endTime"))
+
+    class Config(BaseConfig):
+        """Configuration for serialization and deserialization.."""
+
+        serialize_by_alias = True
+
+    def __post_serialize__(self, d: dict[Any, Any]) -> dict[Any, Any]:
+        """Post-process the data before serialization."""
+        if self.start_time:
+            d["startTime"] = self.start_time.strftime("%H:%M")  # Format to hh:mm
+        if self.end_time:
+            d["endTime"] = self.end_time.strftime("%H:%M")  # Format to hh:mm
+        return d
 
 
 @dataclass
@@ -43,6 +56,7 @@ class DepartureTimer(DataClassORJSONMixin):
     preferred_charging_times: list[ChargingTime] | None = field(
         default=None, metadata=field_options(alias="preferredChargingTimes")
     )
+    one_off_day: Weekday | None = field(default=None, metadata=field_options(alias="oneOffDay"))
     recurring_on: list[Weekday] | None = field(
         default=None, metadata=field_options(alias="recurringOn")
     )
@@ -51,6 +65,27 @@ class DepartureTimer(DataClassORJSONMixin):
     )
     time: datetime_time | None = field(default=None, metadata=field_options(alias="time"))
     type: TimerMode | None = field(default=None, metadata=field_options(alias="type"))
+
+    class Config(BaseConfig):
+        """Configuration for serialization and deserialization.."""
+
+        serialize_by_alias = True
+        omit_none = True
+
+    def __post_serialize__(self, d: dict[Any, Any]) -> dict[Any, Any]:
+        """Post-process the data before serialization."""
+        if self.time:
+            d["time"] = self.time.strftime("%H:%M")  # Format to hh:mm
+        return d
+
+
+@dataclass
+class DepartureSettings(DataClassORJSONMixin):
+    """Information related to DepartureSettings."""
+
+    minimum_battery_state_of_charge_in_percent: int | None = field(
+        default=None, metadata=field_options(alias="minimumBatteryStateOfChargeInPercent")
+    )
 
 
 @dataclass

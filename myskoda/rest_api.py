@@ -5,8 +5,7 @@ import json
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
-from zoneinfo import ZoneInfo
+from datetime import UTC, datetime
 
 from aiohttp import ClientResponseError, ClientSession
 
@@ -534,17 +533,13 @@ class RestApi:
     async def set_departure_timer(self, vin: str, timer: DepartureTimer) -> None:
         """Enable or disable departure timer."""
         _LOGGER.debug(
-            "Setting departure timer nr. %i for vehicle %s to %r", timer.id, vin, timer.enabled
+            "Setting departure timer #%i for vehicle %s to %r", timer.id, vin, timer.enabled
         )
-        # Define the timezone
-        tz = ZoneInfo("Europe/Paris")  # Adjust the timezone as needed
-        # Get the current datetime with timezone
-        now = datetime.now(tz)
-        # Format the datetime string
+
+        now = datetime.now(UTC)
         datetime_str = now.isoformat()
 
-        json_data = {"deviceDateTime": datetime_str, "timers": [{"id": timer.id, "enabled": timer.enabled}]}
-        print(json_data)
+        json_data = {"deviceDateTime": datetime_str, "timers": [timer.to_dict()]}
         await self._make_post_request(
             url=f"/v1/vehicle-automatization/{vin}/departure/timers",
             json=json_data,

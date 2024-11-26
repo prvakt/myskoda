@@ -282,10 +282,38 @@ class MySkoda:
         await self.rest_api.unlock(vin, spin)
         await future
 
-    async def set_departure_timer(self, vin: str, timer: DepartureTimer) -> None:
-        """Enable or disable departure timer."""
+    async def set_departure_timer(
+        self, vin: str, timer: int | DepartureTimer, enabled: bool | None = None
+    ) -> None:
+        """Enable/disable departure timer using the car timer config or directly set a timer."""
+        if isinstance(timer, int):  # Handle timer ID and enabled flag
+            if enabled is None:
+                error_message = "The 'enabled' parameter must be provided when using a timer ID."
+                raise ValueError(error_message)
+
+            departure_info = (await self.rest_api.get_departure_timers(vin)).result
+            selected_timer = (
+                next((t for t in departure_info.timers if t.id == timer), None)
+                if departure_info.timers
+                else None
+            )
+            if not selected_timer:
+                error_message = f"Unsupported DepartureTimer id: {timer}. Must be 1, 2, or 3."
+                raise ValueError(error_message)
+
+            selected_timer.enabled = enabled
+            timer_to_set = selected_timer
+        elif isinstance(timer, DepartureTimer):  # Handle DepartureTimer object
+            timer_to_set = timer
+        else:
+            error_message = (
+                "The 'timer' parameter must be either an int or a DepartureTimer object."
+            )
+            raise TypeError(error_message)
+
+        # Perform the operation
         future = self._wait_for_operation(OperationName.UPDATE_DEPARTURE_TIMERS)
-        await self.rest_api.set_departure_timer(vin, timer)
+        await self.rest_api.set_departure_timer(vin, timer_to_set)
         await future
 
     async def get_departure_timers(self, vin: str, anonymize: bool = False) -> DepartureInfo:
@@ -409,7 +437,6 @@ class MySkoda:
                 result=result.result.to_dict(),
             )
 
-
     async def get_endpoint(
         self, vin: str, endpoint: Endpoint, anonymize: bool = False
     ) -> GetEndpointResult[Any]:
@@ -436,7 +463,6 @@ class MySkoda:
 
         # Call the method and return the result
         return await method(vin, anonymize=anonymize)
-
 
     async def generate_get_fixture(
         self, name: str, description: str, vins: list[str], endpoint: Endpoint
